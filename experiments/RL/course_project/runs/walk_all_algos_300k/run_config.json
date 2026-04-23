@@ -1,0 +1,13 @@
+{
+  "algorithms": [
+    "a2c",
+    "sac",
+    "tqc"
+  ],
+  "seeds": [
+    0
+  ],
+  "timesteps": 300000,
+  "device": "cpu",
+  "env_name": "walk"
+}
