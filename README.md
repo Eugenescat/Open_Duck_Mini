@@ -1,3 +1,76 @@
+# CS 4180/5180 Final Project — PPO vs. SAC for Open Duck Mini Locomotion
+
+**Author:** Yan Yijun &nbsp;·&nbsp; **Course:** CS 4180/5180 RL (Spring 2026) &nbsp;·&nbsp; **Branch:** `v2`
+
+This fork of the [Open Duck Mini](https://github.com/apirrone/Open_Duck_Mini) project studies on-policy vs. off-policy deep RL (PPO, SAC, A2C, TQC) for bipedal locomotion, with an additional reward-engineering ablation. **All course-project deliverables live in a single directory:**
+
+### 📁 `experiments/RL/course_project/`
+
+| File | Purpose |
+|---|---|
+| **[`report_aaai.pdf`](experiments/RL/course_project/report_aaai.pdf)** | **Final paper (AAAI format, 5 pages).** Start here. |
+| [`report_aaai.tex`](experiments/RL/course_project/report_aaai.tex) / [`references.bib`](experiments/RL/course_project/references.bib) | LaTeX source |
+| [`imitation_env.py`](experiments/RL/course_project/imitation_env.py) | Primary training env (reward-bugfixed imitation reward, 17 terms) |
+| [`imitation_env_walk.py`](experiments/RL/course_project/imitation_env_walk.py) | Walk env variant (relaxed forward gate, reweighted for locomotion) |
+| [`env_factory.py`](experiments/RL/course_project/env_factory.py) | Env registration for `simple` / `imitation` / `walk` variants |
+| [`train_compare.py`](experiments/RL/course_project/train_compare.py) | Main training entry point (PPO / SAC / A2C / TQC × seeds) |
+| [`evaluate_compare.py`](experiments/RL/course_project/evaluate_compare.py) | Rollout evaluation (return, ep-length, forward speed) |
+| [`continue_train.py`](experiments/RL/course_project/continue_train.py) | Warm-start training from a saved SB3 checkpoint |
+| [`plot_learning_curves.py`](experiments/RL/course_project/plot_learning_curves.py) | TensorBoard → PNG/PDF learning-curve plots |
+| [`record_policy.py`](experiments/RL/course_project/record_policy.py) | Record a trained policy to MP4 |
+| [`make_comparison_video.py`](experiments/RL/course_project/make_comparison_video.py) | Build the 2×2 PPO/SAC/A2C/TQC side-by-side video |
+| [`summarize_results.py`](experiments/RL/course_project/summarize_results.py) | Build markdown evaluation tables |
+| [`README.md`](experiments/RL/course_project/README.md) | Step-by-step reproduction instructions |
+
+### 🧪 Experimental runs (under `experiments/RL/course_project/runs/`)
+
+Every run directory contains `models/` (SB3 `.zip` checkpoints), `tensorboard/`, `monitor/`, `evaluation/` (eval JSON/CSV), `learning_curves_{return,length}.{pdf,png}`, and `videos/` with a recorded rollout.
+
+| Run | What it contains | Referenced in report as |
+|---|---|---|
+| `main_ppo_sac_300k/` | PPO vs SAC, 3 seeds × 300k (primary comparison) | Table 2, Figure 1 |
+| `supp_a2c_tqc_150k/` | A2C vs TQC, 3 seeds × 150k (supplementary) | Table 3, Figure 2 |
+| `ppo_imitation_bugfix_1_5M/` | PPO 3 seeds × 1.5M on imitation (reward-hacking study) | Table 4 |
+| `ppo_walk_1_5M/` | PPO single seed × 1.5M on walk variant (breaks reward hacking) | Table 5, Figure 3 |
+| `ppo_walk_3_5M/` | PPO continued to 3.5M (speed–stability tradeoff) | Table 5, Figure 4 |
+| `walk_all_algos_300k/` | SAC/A2C/TQC on walk variant (extra ablation, single seed) | Ablation disclaimer |
+| plus earlier exploratory runs (`ppo_footsteps_*`, `ppo_imitation_walkfix_v{1..5}*`, `smoke_*`, …) | | Not in final report; kept for transparency |
+
+### ▶️ Reproducing the main results
+
+```bash
+# Main: PPO vs SAC, 3 seeds × 300k
+python experiments/RL/course_project/train_compare.py \
+  --algos ppo sac --env imitation --seeds 0 1 2 \
+  --timesteps 300000 --device cpu --run-name main_ppo_sac_300k
+
+# Supplementary: A2C vs TQC, 3 seeds × 150k
+python experiments/RL/course_project/train_compare.py \
+  --algos a2c tqc --env imitation --seeds 0 1 2 \
+  --timesteps 150000 --device cpu --run-name supp_a2c_tqc_150k
+
+# Reward-ablation walking policy: PPO, 1.5M on walk variant
+python experiments/RL/course_project/train_compare.py \
+  --algos ppo --env walk --seeds 0 --timesteps 1500000 \
+  --device cpu --run-name ppo_walk_1_5M
+
+# Evaluate any run
+python experiments/RL/course_project/evaluate_compare.py \
+  --run-dir experiments/RL/course_project/runs/main_ppo_sac_300k \
+  --episodes 10 --max-steps 2000 --deterministic
+```
+
+### 🎥 Demo videos
+
+- Walking-then-falling PPO policy: https://youtu.be/DXRsKvcgk8M
+- 2×2 side-by-side comparison: [`experiments/RL/course_project/figures/four_algo_comparison_labeled.mp4`](experiments/RL/course_project/figures/four_algo_comparison_labeled.mp4)
+
+### 🔧 What changed from upstream
+
+Reward-engineering bug fixes in `experiments/RL/new/{footsteps,simple,placo_imitate}_env.py` and `experiments/RL/course_project/imitation_env.py` (missing squares in smoothness terms, abs() trap in yaw, saturated gait scaling, unnormalized weights). See commit `b8135e9` for the full diff. These fixes apply to all algorithms in all comparisons above.
+
+---
+
 # Open Duck Mini v2
 
 <table>
