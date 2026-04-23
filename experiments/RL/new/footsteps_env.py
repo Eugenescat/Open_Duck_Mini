@@ -1,5 +1,6 @@
 import numpy as np
 import placo
+from pathlib import Path
 from gymnasium import utils
 from gymnasium.envs.mujoco import MujocoEnv
 from gymnasium.spaces import Box
@@ -9,6 +10,10 @@ from mini_bdx.placo_walk_engine import PlacoWalkEngine
 from mini_bdx.utils.mujoco_utils import check_contact, get_contact_force
 
 FRAME_SKIP = 4
+ROOT_DIR = Path(__file__).resolve().parents[3]
+ROBOT_URDF = ROOT_DIR / "mini_bdx" / "robots" / "bdx" / "robot.urdf"
+SCENE_XML = ROOT_DIR / "mini_bdx" / "robots" / "bdx" / "scene.xml"
+ROBOT_ASSET_DIR = ROOT_DIR / "mini_bdx" / "robots" / "bdx"
 
 
 class BDXEnv(MujocoEnv, utils.EzPickle):
@@ -51,6 +56,8 @@ class BDXEnv(MujocoEnv, utils.EzPickle):
 
         self.prev_action = np.zeros(self.nb_dofs)
         self.prev_torque = np.zeros(self.nb_dofs)
+        self.prev_base_x = 0.0
+        self.episode_start_x = 0.0
 
         self.prev_t = 0
         self.init_pos = np.array(
@@ -74,7 +81,8 @@ class BDXEnv(MujocoEnv, utils.EzPickle):
         )
 
         self.pwe = PlacoWalkEngine(
-            "/home/antoine/MISC/mini_BDX/mini_bdx/robots/bdx/robot.urdf",
+            asset_path=str(ROBOT_ASSET_DIR),
+            model_filename="robot.urdf",
             ignore_feet_contact=True,
         )
 
@@ -85,7 +93,7 @@ class BDXEnv(MujocoEnv, utils.EzPickle):
 
         MujocoEnv.__init__(
             self,
-            "/home/antoine/MISC/mini_BDX/mini_bdx/robots/bdx/scene.xml",
+            str(SCENE_XML),
             FRAME_SKIP,
             observation_space=observation_space,
             **kwargs,
@@ -178,7 +186,26 @@ class BDXEnv(MujocoEnv, utils.EzPickle):
             self.data.body("left_foot").cvel[3:]
         )  # [rot:vel] size 6
 
-        return left_contact_force - right_contact_force + right_speed - left_speed
+        # Symmetric formulation: encourage one support + one swing behavior
+        # without introducing left/right directional bias.
+        imbalance = abs(left_contact_force - right_contact_force) + abs(
+            right_speed - left_speed
+        )
+        return np.exp(-1.0 * imbalance)
+
+    def forward_velocity_reward(self):
+        x_velocity = float(self.data.body("base").cvel[3:][0])
+        target_vx = 0.10
+        return np.exp(-20.0 * (x_velocity - target_vx) ** 2)
+
+    def forward_progress_reward(self):
+        x_now = float(self.data.body("base").xpos[0])
+        dx = x_now - self.prev_base_x
+        return np.clip(dx * 40.0, -1.0, 1.0)
+
+    def backward_penalty(self):
+        x_velocity = float(self.data.body("base").cvel[3:][0])
+        return -np.clip((-x_velocity) * 8.0, 0.0, 1.0)
 
     def step_reward(self):
         # Incentivize the robot to step and orient the body toward targets
@@ -237,7 +264,7 @@ class BDXEnv(MujocoEnv, utils.EzPickle):
         current_yaw = R.from_matrix(
             np.array(self.data.body("base").xmat).reshape(3, 3)
         ).as_euler("xyz")[2]
-        return -((abs(desired_yaw) - abs(current_yaw)) ** 2)
+        return -((desired_yaw - current_yaw) ** 2)
 
     def height_reward(self):
         current_height = self.data.body("base").xpos[2]
@@ -250,16 +277,14 @@ class BDXEnv(MujocoEnv, utils.EzPickle):
 
     def action_reward(self, a):
         current_action = a.copy()
-
-        # This can explode, don't understand why
-        return min(
-            2, np.exp(-5 * np.sum((self.prev_action - current_action)) / self.nb_dofs)
+        return np.exp(
+            -5 * np.sum((self.prev_action - current_action) ** 2) / self.nb_dofs
         )
 
     def torque_reward(self):
         current_torque = self.data.qfrc_actuator
         return np.exp(
-            -0.25 * np.sum((self.prev_torque - current_torque)) / self.nb_dofs
+            -0.25 * np.sum((self.prev_torque - current_torque) ** 2) / self.nb_dofs
         )
 
     def step(self, a):
@@ -291,11 +316,13 @@ class BDXEnv(MujocoEnv, utils.EzPickle):
             # https://github.com/google-deepmind/mujoco/issues/104
 
             reward = (
-                # 0.30 * self.gait_reward()
-                0.30 * self.support_flying_reward()
-                + 0.6 * self.step_reward()
+                0.15 * self.support_flying_reward()
+                + 0.25 * self.step_reward()
+                + 0.15 * self.forward_velocity_reward()
+                + 0.10 * self.forward_progress_reward()
+                + 0.05 * self.backward_penalty()
                 + 0.05 * self.orient_reward()
-                + 0.15 * self.height_reward()
+                + 0.10 * self.height_reward()
                 + 0.05 * self.upright_reward()
                 + 0.05 * self.action_reward(a)
                 + 0.05 * self.torque_reward()
@@ -305,11 +332,13 @@ class BDXEnv(MujocoEnv, utils.EzPickle):
 
         if self.render_mode == "human":
             if self.startup_cooldown <= 0:
-                print("support flying reward: ", 0.30 * self.support_flying_reward())
-                # print("Gait reward: ", 0.30 * self.gait_reward())
-                print("Step reward: ", 0.6 * self.step_reward())
+                print("support flying reward: ", 0.15 * self.support_flying_reward())
+                print("Step reward: ", 0.25 * self.step_reward())
+                print("Fwd vel reward: ", 0.15 * self.forward_velocity_reward())
+                print("Fwd progress reward: ", 0.10 * self.forward_progress_reward())
+                print("Backward penalty: ", 0.05 * self.backward_penalty())
                 print("Orient reward: ", 0.05 * self.orient_reward())
-                print("Height reward: ", 0.15 * self.height_reward())
+                print("Height reward: ", 0.10 * self.height_reward())
                 print("Upright reward: ", 0.05 * self.upright_reward())
                 print("Action reward: ", 0.05 * self.action_reward(a))
                 print("Torque reward: ", 0.05 * self.torque_reward())
@@ -319,6 +348,7 @@ class BDXEnv(MujocoEnv, utils.EzPickle):
         self.prev_t = t
         self.prev_action = a.copy()
         self.prev_torque = self.data.qfrc_actuator.copy()
+        self.prev_base_x = float(self.data.body("base").xpos[0])
 
         # self.viz.display(self.pwe.robot.state.q)
         return (ob, reward, self.is_terminated(), False, {})  # terminated  # truncated
@@ -337,6 +367,8 @@ class BDXEnv(MujocoEnv, utils.EzPickle):
         self.pwe.set_traj(0.03, 0, 0.001)
 
         self.goto_init()
+        self.prev_base_x = float(self.data.body("base").xpos[0])
+        self.episode_start_x = self.prev_base_x
 
         self.set_state(self.data.qpos, self.data.qvel)
         return self._get_obs()

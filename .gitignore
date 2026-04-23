@@ -9,3 +9,35 @@ experiments/RL/new/ppo/
 *.zip
 *.txt
 *.onnx
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# LaTeX auxiliary
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.toc
+
+# Course project runs: allow checkpoints and logs explicitly
+!experiments/RL/course_project/**/*.zip
+!experiments/RL/course_project/**/*.txt
+!experiments/RL/course_project/**/*.log
+!experiments/RL/course_project/**/*.csv
+
+# Training artifact folder still being written
+experiments/RL/course_project/runs/walk_all_algos_300k/
+
+# AAAI-provided author kit (not our work)
+experiments/RL/course_project/aaai_authorkit/
+experiments/RL/course_project/aaai_authorkit.zip
+
+# LaTeX missing-font noise
+missfont.log
+report_template.md

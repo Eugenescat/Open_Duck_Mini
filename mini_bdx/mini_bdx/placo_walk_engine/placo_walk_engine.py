@@ -58,14 +58,17 @@ class PlacoWalkEngine:
         # tasks.right_foot_task.orientation().configure("right_foot_orientation", "soft", 1e-6)
 
         # # Creating a joint task to assign DoF values for upper body
-        self.joints = self.parameters.joints
-        joint_degrees = self.parameters.joint_angles
-        joint_radians = {
-            joint: np.deg2rad(degrees) for joint, degrees in joint_degrees.items()
-        }
-        self.joints_task = self.solver.add_joints_task()
-        self.joints_task.set_joints(joint_radians)
-        self.joints_task.configure("joints", "soft", 1.0)
+        self.joints = []
+        self.joints_task = None
+        if hasattr(self.parameters, "joints") and hasattr(self.parameters, "joint_angles"):
+            self.joints = self.parameters.joints
+            joint_degrees = self.parameters.joint_angles
+            joint_radians = {
+                joint: np.deg2rad(degrees) for joint, degrees in joint_degrees.items()
+            }
+            self.joints_task = self.solver.add_joints_task()
+            self.joints_task.set_joints(joint_radians)
+            self.joints_task.configure("joints", "soft", 1.0)
 
         # Placing the robot in the initial position
         print("Placing the robot in the initial position...")
@@ -100,7 +103,7 @@ class PlacoWalkEngine:
         )
 
         self.supports = placo.FootstepsPlanner.make_supports(
-            self.footsteps, True, self.parameters.has_double_support(), True
+            self.footsteps, 0.0, True, self.parameters.has_double_support(), True
         )
 
         # Creating the pattern generator and making an initial plan
@@ -124,55 +127,43 @@ class PlacoWalkEngine:
     def load_defaults(self, filename):
         with open(filename, "r") as f:
             data = json.load(f)
-        params = self.parameters
-        load_parameters(data)
+        self.load_parameters(data)
 
     def load_parameters(self, data):
         params = self.parameters
-        params.double_support_ratio = data.get(
-            "double_support_ratio", params.double_support_ratio
-        )
-        params.startend_double_support_ratio = data.get(
-            "startend_double_support_ratio", params.startend_double_support_ratio
-        )
-        params.planned_timesteps = data.get(
-            "planned_timesteps", params.planned_timesteps
-        )
-        params.replan_timesteps = data.get("replan_timesteps", params.replan_timesteps)
-        params.walk_com_height = data.get("walk_com_height", params.walk_com_height)
-        params.walk_foot_height = data.get("walk_foot_height", params.walk_foot_height)
-        params.walk_trunk_pitch = np.deg2rad(
-            data.get("walk_trunk_pitch", np.rad2deg(params.walk_trunk_pitch))
-        )
-        params.walk_foot_rise_ratio = data.get(
-            "walk_foot_rise_ratio", params.walk_foot_rise_ratio
-        )
-        params.single_support_duration = data.get(
-            "single_support_duration", params.single_support_duration
-        )
-        params.single_support_timesteps = data.get(
-            "single_support_timesteps", params.single_support_timesteps
-        )
-        params.foot_length = data.get("foot_length", params.foot_length)
-        params.feet_spacing = data.get("feet_spacing", params.feet_spacing)
-        params.zmp_margin = data.get("zmp_margin", params.zmp_margin)
-        params.foot_zmp_target_x = data.get(
-            "foot_zmp_target_x", params.foot_zmp_target_x
-        )
-        params.foot_zmp_target_y = data.get(
-            "foot_zmp_target_y", params.foot_zmp_target_y
-        )
-        params.walk_max_dtheta = data.get("walk_max_dtheta", params.walk_max_dtheta)
-        params.walk_max_dy = data.get("walk_max_dy", params.walk_max_dy)
-        params.walk_max_dx_forward = data.get(
-            "walk_max_dx_forward", params.walk_max_dx_forward
-        )
-        params.walk_max_dx_backward = data.get(
-            "walk_max_dx_backward", params.walk_max_dx_backward
-        )
-        params.joints = data.get("joints", [])
-        params.joint_angles = data.get("joint_angles", [])
-        if "trunk_mode" in data:
+        # Keep compatibility across placo versions where parameter fields differ.
+        for key in [
+            "double_support_ratio",
+            "startend_double_support_ratio",
+            "planned_timesteps",
+            "replan_timesteps",
+            "walk_com_height",
+            "walk_foot_height",
+            "walk_foot_rise_ratio",
+            "single_support_duration",
+            "single_support_timesteps",
+            "foot_length",
+            "feet_spacing",
+            "zmp_margin",
+            "foot_zmp_target_x",
+            "foot_zmp_target_y",
+            "walk_max_dtheta",
+            "walk_max_dy",
+            "walk_max_dx_forward",
+            "walk_max_dx_backward",
+        ]:
+            if hasattr(params, key):
+                setattr(params, key, data.get(key, getattr(params, key)))
+
+        if hasattr(params, "walk_trunk_pitch"):
+            params.walk_trunk_pitch = np.deg2rad(
+                data.get("walk_trunk_pitch", np.rad2deg(params.walk_trunk_pitch))
+            )
+        if hasattr(params, "joints"):
+            params.joints = data.get("joints", params.joints)
+        if hasattr(params, "joint_angles"):
+            params.joint_angles = data.get("joint_angles", params.joint_angles)
+        if "trunk_mode" in data and hasattr(params, "trunk_mode"):
             params.trunk_mode = data.get("trunk_mode")
 
     def get_angles(self, ignore=[]):
@@ -203,7 +194,7 @@ class PlacoWalkEngine:
         )
 
         self.supports = placo.FootstepsPlanner.make_supports(
-            self.footsteps, True, self.parameters.has_double_support(), True
+            self.footsteps, 0.0, True, self.parameters.has_double_support(), True
         )
         self.trajectory = self.walk.plan(self.supports, self.robot.com_world(), 0.0)
 
@@ -278,9 +269,11 @@ class PlacoWalkEngine:
             _ = self.solver.solve(True)
 
         # If enough time elapsed and we can replan, do the replanning
+        replan_steps = getattr(
+            self.parameters, "replan_timesteps", self.parameters.planned_timesteps
+        )
         if (
-            self.t - self.last_replan
-            > self.parameters.replan_timesteps * self.parameters.dt()
+            self.t - self.last_replan > replan_steps * self.parameters.dt()
             and self.walk.can_replan_supports(self.trajectory, self.t)
         ):
             self.last_replan = self.t

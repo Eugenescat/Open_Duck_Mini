@@ -1,4 +1,5 @@
 import numpy as np
+from pathlib import Path
 from gymnasium import utils
 from gymnasium.envs.mujoco import MujocoEnv
 from gymnasium.spaces import Box
@@ -10,6 +11,10 @@ from mini_bdx.utils.mujoco_utils import check_contact
 
 
 FRAME_SKIP = 4
+ROOT_DIR = Path(__file__).resolve().parents[3]
+ROBOT_URDF = ROOT_DIR / "mini_bdx" / "robots" / "bdx" / "robot.urdf"
+SCENE_XML = ROOT_DIR / "mini_bdx" / "robots" / "bdx" / "scene.xml"
+ROBOT_ASSET_DIR = ROOT_DIR / "mini_bdx" / "robots" / "bdx"
 
 
 class BDXEnv(MujocoEnv, utils.EzPickle):
@@ -92,14 +97,15 @@ class BDXEnv(MujocoEnv, utils.EzPickle):
         )
 
         self.pwe = PlacoWalkEngine(
-            "/home/antoine/MISC/mini_BDX/mini_bdx/robots/bdx/robot.urdf",
+            asset_path=str(ROBOT_ASSET_DIR),
+            model_filename="robot.urdf",
             ignore_feet_contact=True,
         )
 
         # self.viz = robot_viz(self.pwe.robot)
         MujocoEnv.__init__(
             self,
-            "/home/antoine/MISC/mini_BDX/mini_bdx/robots/bdx/scene.xml",
+            str(SCENE_XML),
             FRAME_SKIP,
             observation_space=observation_space,
             **kwargs,
@@ -195,6 +201,7 @@ class BDXEnv(MujocoEnv, utils.EzPickle):
                 + 0.1 * self.upright_reward()
                 + 0.1 * self.velocity_tracking_reward()
                 + 0.01 * self.smoothness_reward2()
+                + 0.2 * self.follow_placo_reward()
             )
             # print(self.follow_placo_reward(a))
 

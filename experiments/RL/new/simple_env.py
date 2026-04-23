@@ -137,7 +137,7 @@ class BDXEnv(MujocoEnv, utils.EzPickle):
             np.array(self.data.body("base").xmat).reshape(3, 3)
         ).as_euler("xyz")[2]
 
-        return -((abs(desired_yaw) - abs(current_yaw)) ** 2)
+        return -((desired_yaw - current_yaw) ** 2)
 
     def follow_xy_target_reward(self):
         x_velocity = self.data.body("base").cvel[3:][0]
@@ -162,16 +162,14 @@ class BDXEnv(MujocoEnv, utils.EzPickle):
 
     def action_reward(self, a):
         current_action = a.copy()
-
-        # This can explode, don't understand why
-        return min(
-            2, np.exp(-5 * np.sum((self.prev_action - current_action)) / self.nb_dofs)
+        return np.exp(
+            -5 * np.sum((self.prev_action - current_action) ** 2) / self.nb_dofs
         )
 
     def torque_reward(self):
         current_torque = self.data.qfrc_actuator
         return np.exp(
-            -0.25 * np.sum((self.prev_torque - current_torque)) / self.nb_dofs
+            -0.25 * np.sum((self.prev_torque - current_torque) ** 2) / self.nb_dofs
         )
 
     def feet_spacing_reward(self):
