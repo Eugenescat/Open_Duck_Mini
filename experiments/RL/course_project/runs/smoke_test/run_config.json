@@ -1,0 +1,10 @@
+{
+  "algorithms": [
+    "ppo"
+  ],
+  "seeds": [
+    0
+  ],
+  "timesteps": 128,
+  "device": "cpu"
+}

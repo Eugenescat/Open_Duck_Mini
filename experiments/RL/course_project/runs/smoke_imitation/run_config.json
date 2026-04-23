@@ -1,0 +1,11 @@
+{
+  "algorithms": [
+    "ppo"
+  ],
+  "seeds": [
+    0
+  ],
+  "timesteps": 32,
+  "device": "cpu",
+  "env_name": "imitation"
+}
