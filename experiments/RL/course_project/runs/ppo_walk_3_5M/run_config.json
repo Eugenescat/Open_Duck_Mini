@@ -1,0 +1,12 @@
+{
+  "algorithms": [
+    "ppo"
+  ],
+  "seeds": [
+    0
+  ],
+  "timesteps": 2000000,
+  "device": "cpu",
+  "env_name": "walk",
+  "continued_from": "experiments/RL/course_project/runs/ppo_walk_1_5M/models/ppo/seed_0.zip"
+}
