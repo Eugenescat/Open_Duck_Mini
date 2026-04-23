@@ -1,0 +1,13 @@
+{
+  "algorithms": [
+    "a2c",
+    "tqc"
+  ],
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "timesteps": 150000,
+  "device": "cpu"
+}
